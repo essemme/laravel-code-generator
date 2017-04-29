@@ -141,7 +141,8 @@ abstract class HtmlGeneratorBase
         foreach ($fields as $field) {
             if ($field->isOnIndexView) {
                 $row = $stub;
-                $this->replaceFieldTitle($row, $this->getTitle($field->getLabel(), true));
+                $this->replaceFieldTitle($row, $this->getTitle($field->getLabel(), true))
+                    ->replaceFieldName ($row, $field->name);
                 $rows .= $row . PHP_EOL;
             }
         }
