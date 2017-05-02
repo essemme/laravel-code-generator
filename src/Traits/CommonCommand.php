@@ -7,6 +7,7 @@ use File;
 use Exception;
 use CrestApps\CodeGenerator\Support\Helpers;
 use CrestApps\CodeGenerator\Models\Field;
+use Illuminate\Container\Container;
 
 trait CommonCommand
 {
@@ -31,8 +32,7 @@ trait CommonCommand
      */
     protected function getFields($fields, $langFile, $fieldsFile = null)
     {
-        if (!empty($fieldsFile)) 
-        {
+        if (!empty($fieldsFile)) {
             return Helpers::getFieldsFromFile($fieldsFile, $langFile);
         }
 
@@ -234,12 +234,37 @@ trait CommonCommand
      */
     protected function replaceModelName(&$stub, $modelName)
     {
-        $stub = str_replace('{{modelName}}', strtolower($modelName), $stub);
-        $stub = str_replace('{{modelNameClass}}', ucwords($modelName), $stub);
-        $stub = str_replace('{{modelNamePlural}}', str_plural(strtolower($modelName)), $stub);
-        $stub = str_replace('{{modelNamePluralCap}}', ucwords(str_plural(strtolower($modelName))), $stub);
+        $stub = str_replace('{{modelName}}', $this->getModelName($modelName), $stub);
+        $stub = str_replace('{{modelNameClass}}', $this->getModelClassName($modelName), $stub);
+        $stub = str_replace('{{modelNamePlural}}', $this->getModelPluralName($modelName), $stub);
+        $stub = str_replace('{{modelNamePluralCap}}', $this->getModelNamePluralCap($modelName), $stub);
 
         return $this;
+    }
+
+    protected function getModelClassName($name)
+    {
+        return ucwords($name);
+    }
+
+    protected function getModelName($name)
+    {
+        return strtolower($name);
+    }
+
+    protected function getModelPluralName($name)
+    {
+        return str_plural(strtolower($name));
+    }
+
+    protected function getModelNamePluralCap($name)
+    {
+        return ucwords($this->getModelPluralName($name));
+    }
+
+    protected function getAppNamespace()
+    {
+        return Container::getInstance()->getNamespace();
     }
 
     /**

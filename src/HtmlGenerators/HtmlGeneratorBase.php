@@ -118,7 +118,7 @@ abstract class HtmlGeneratorBase
     {
         $this->replaceFieldName($stub, $field->name)
              ->replaceModelName($stub, $this->modelName)
-             ->replaceRowFieldValue($stub, $this->getFieldAccessorValue($field))
+             ->replaceRowFieldValue($stub, $this->getFieldAccessorValue($field, 'show'))
              ->replaceFieldTitle($stub, $this->getTitle($field->getLabel(), true));
 
         return $stub;
@@ -142,12 +142,27 @@ abstract class HtmlGeneratorBase
             if ($field->isOnIndexView) {
                 $row = $stub;
                 $this->replaceFieldTitle($row, $this->getTitle($field->getLabel(), true))
-                    ->replaceFieldName ($row, $field->name);
+                     ->replaceCommonTemplates($row, $field);
                 $rows .= $row . PHP_EOL;
             }
         }
 
         return $rows;
+    }
+
+    /**
+     * Replaces field's common templates
+     *
+     * @param CrestApps\CodeGenerator\Models\Field $field
+     *
+     * @return $this
+    */
+    public function replaceCommonTemplates(& $stub, Field $field)
+    {
+        return $this->replaceFieldName($stub, $field->name)
+                    ->replaceModelName($stub, $this->modelName)
+                    ->replaceCssClass($stub, $field->cssClass)
+                    ->replaceFieldType($stub, $field->htmlType);
     }
 
     /**
@@ -183,8 +198,9 @@ abstract class HtmlGeneratorBase
     {
         $this->replaceFieldName($stub, $field->name)
              ->replaceModelName($stub, $this->modelName)
-             ->replaceRowFieldValue($stub, $this->getFieldAccessorValue($field))
-             ->replaceFieldTitle($stub, $this->getTitle($field->getLabel(), true));
+             ->replaceRowFieldValue($stub, $this->getFieldAccessorValue($field, 'index'))
+             ->replaceFieldTitle($stub, $this->getTitle($field->getLabel(), true))
+             ->replaceCommonTemplates($stub, $field);
 
         return $stub;
     }
@@ -238,12 +254,19 @@ abstract class HtmlGeneratorBase
      * Gets a value accessor for the field.
      *
      * @param CrestApps\CodeGenerator\Models\Field $field
+     * @param string $view
      *
      * @return string
     */
-    protected function getFieldAccessorValue(Field $field)
+    protected function getFieldAccessorValue(Field $field, $view)
     {
-        $fieldAccessor = sprintf('$%s->%s', strtolower($this->modelName), $field->name);
+        $fieldAccessor = sprintf('$%s->%s', $this->getModelName($this->modelName), $field->name);
+
+        if ($field->hasForeignRelation() && $field->isOnView($view)) {
+            $relation = $field->getForeignRelation();
+
+            $fieldAccessor = sprintf('$%s->%s->%s', $this->getModelName($this->modelName), $relation->name, $relation->field);
+        }
 
         if ($field->isBoolean()) {
             return sprintf("(%s) ? '%s' : '%s'", $fieldAccessor, $field->getTrueBooleanOption()->text, $field->getFalseBooleanOption()->text);
@@ -418,16 +441,52 @@ abstract class HtmlGeneratorBase
         $optionValue = $this->getFieldValue($field->htmlValue, $field->name);
 
         $this->replaceFieldName($stub, $fieldName)
-             ->replaceFieldItems($stub, $this->getFieldItems($field->getOptionsByLang()))
+             ->replaceFieldItems($stub, $this->getFieldItems($field))
              ->replaceFieldMultiple($stub, $field->isMultipleAnswers)
              ->replaceFieldValue($stub, $optionValue)
-             ->replaceSelectedValue($stub, $this->getSelectedValueForMenu($optionValue, $field->name, $field->isMultipleAnswers))
+             ->replaceSelectedValue($stub, $this->getSelectedValueForMenu($field))
+             ->replaceFieldItem($stub, $this->getFieldItem($field))
+             ->replaceFieldItemAccessor($stub, $this->getFieldItemAccessor($field))
+             ->replaceFieldValueAccessor($stub, $this->getFieldValueAccessor($field))
              ->replaceFieldRequired($stub, $parser->isRequired())
              ->replaceFieldPlaceHolder($stub, $this->getFieldPlaceHolderForMenu($field->placeHolder, $field->name))
              ->replaceCssClass($stub, $field->cssClass)
              ->wrapField($stub, $field);
 
         return $stub;
+    }
+
+    protected function getFieldItem(Field $field)
+    {
+        if ($field->hasForeignRelation()) {
+            $relation = $field->getForeignRelation();
+
+            return sprintf('$%s', $relation->getSingleName());
+        }
+
+        return '$text';
+    }
+
+    protected function getFieldItemAccessor(Field $field)
+    {
+        if ($field->hasForeignRelation()) {
+            $relation = $field->getForeignRelation();
+
+            return sprintf('$%s->%s', $relation->getSingleName(), $relation->field);
+        }
+
+        return '$text';
+    }
+
+    protected function getFieldValueAccessor(Field $field)
+    {
+        if ($field->hasForeignRelation()) {
+            $relation = $field->getForeignRelation();
+
+            return sprintf('$%s->%s', $relation->getSingleName(), $relation->getPrimaryKeyForForeignModel());
+        }
+
+        return '$value';
     }
 
     /**
@@ -453,9 +512,15 @@ abstract class HtmlGeneratorBase
      *
      * @return string
     */
-    protected function getSelectedValueForMenu($value, $name, $isMultiple)
+    protected function getSelectedValueForMenu(Field $field)
     {
-        return $isMultiple ? $this->getMultipleSelectedValue($name) : $this->getSelectedValue($name);
+        $valueAccessor = $this->getFieldValueAccessor($field);
+
+        if ($field->isMultipleAnswers) {
+            return $this->getMultipleSelectedValue($field->name, $valueAccessor);
+        }
+
+        return $this->getSelectedValue($field->name, $valueAccessor);
     }
 
     /**
@@ -491,7 +556,7 @@ abstract class HtmlGeneratorBase
              ->replaceCssClass($stub, $field->cssClass)
              ->replaceFieldMinValue($stub, isset($field->range[0]) ? $field->range[0] : 1)
              ->replaceFieldMaxValue($stub, isset($field->range[1]) ? $field->range[1] : 10)
-             ->replaceSelectedValue($stub, $this->getSelectedValueForMenu('', $field->name, $field->isMultipleAnswers))
+             ->replaceSelectedValue($stub, $this->getSelectedValueForMenu($field))
              ->replaceFieldPlaceHolder($stub, $this->getFieldPlaceHolderForMenu($field->placeHolder, $field->name))
              ->wrapField($stub, $field);
         
@@ -511,7 +576,7 @@ abstract class HtmlGeneratorBase
 
         $this->replaceFieldName($stub, $field->name)
              ->replaceCssClass($stub, $field->cssClass)
-             ->replaceSelectedValue($stub, $this->getSelectedValue($field->name))
+             ->replaceSelectedValue($stub, $this->getSelectedValue($field->name, '$value'))
              ->replaceFieldPlaceHolder($stub, $this->getFieldPlaceHolderForMenu($field->placeHolder, $field->name))
              ->wrapField($stub, $field);
         
@@ -751,6 +816,51 @@ abstract class HtmlGeneratorBase
     protected function replaceFieldName(&$stub, $fieldName)
     {
         $stub = str_replace('{{fieldName}}', $fieldName, $stub);
+
+        return $this;
+    }
+
+    /**
+     * Replace the fieldItem fo the given stub.
+     *
+     * @param string $stub
+     * @param string $name
+     *
+     * @return $this
+     */
+    protected function replaceFieldItem(&$stub, $name)
+    {
+        $stub = str_replace('{{fieldItem}}', $name, $stub);
+
+        return $this;
+    }
+
+    /**
+     * Replace the fieldItemAccessor fo the given stub.
+     *
+     * @param string $stub
+     * @param string $name
+     *
+     * @return $this
+     */
+    protected function replaceFieldItemAccessor(&$stub, $name)
+    {
+        $stub = str_replace('{{fieldItemAccessor}}', $name, $stub);
+
+        return $this;
+    }
+
+    /**
+     * Replace the fieldValueAccessor fo the given stub.
+     *
+     * @param string $stub
+     * @param string $name
+     *
+     * @return $this
+     */
+    protected function replaceFieldValueAccessor(&$stub, $name)
+    {
+        $stub = str_replace('{{fieldValueAccessor}}', $name, $stub);
 
         return $this;
     }
@@ -1057,14 +1167,14 @@ abstract class HtmlGeneratorBase
         return $this;
     }
 
-     /**
+    /**
      * It gets converts an array to a stringbase array for the views.
      *
-     * @param array $labels
+     * @param CrestApps\CodeGenerator\Models\Field $field
      *
      * @return string
      */
-    abstract protected function getFieldItems(array $labels);
+    abstract protected function getFieldItems(Field $field);
 
     /**
      * Gets the min value attribute.
@@ -1174,10 +1284,11 @@ abstract class HtmlGeneratorBase
      * Gets selected value attribute.
      *
      * @param string $name
+     * @param string $valueAccessor
      *
      * @return string
      */
-    abstract protected function getSelectedValue($name);
+    abstract protected function getSelectedValue($name, $valueAccessor);
 
         /**
      * Gets checked item attribute.
@@ -1193,10 +1304,11 @@ abstract class HtmlGeneratorBase
      * Gets selected value attribute.
      *
      * @param string $name
+     * @param string $valueAccessor
      *
      * @return string
      */
-    abstract protected function getMultipleSelectedValue($name);
+    abstract protected function getMultipleSelectedValue($name, $valueAccessor);
 
     /**
      * Gets the html steps attribute.
