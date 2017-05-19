@@ -114,7 +114,7 @@ class StandardHtml extends HtmlGeneratorBase
      *
      * @return string
      */
-    protected function getFieldItems(field $field)
+    protected function getFieldItems(Field $field)
     {
         if ($field->hasForeignRelation() && $field->isOnFormView) {
             return sprintf('$%s', $field->getForeignRelation()->getCollectionName());
@@ -187,7 +187,7 @@ class StandardHtml extends HtmlGeneratorBase
      */
     protected function getMultipleSelectedValue($name, $valueAccessor)
     {
-        return sprintf(" {{ %s ? 'selected' : '' }}", $this->getMultipleRawOptionValue($name, $valueAccessor));
+        return sprintf(" {{ %s ? 'selected' : '' }}", $name);
     }
 
     /**
@@ -200,7 +200,7 @@ class StandardHtml extends HtmlGeneratorBase
      */
     protected function getSelectedValue($name, $valueAccessor)
     {
-        return sprintf(" {{ %s == %s ? 'selected' : '' }}", $this->getRawOptionValue($name, ''), $valueAccessor);
+        return sprintf(" {{ %s == %s ? 'selected' : '' }}", $this->getRawOptionValue($name, ''), '$key');
     }
 
     /**
@@ -217,7 +217,7 @@ class StandardHtml extends HtmlGeneratorBase
 
         $valueString = is_null($value) ? 'null' : sprintf("'%s'", $value);
 
-        return sprintf("old('%s', isset(\$%s) ? \$%s->%s : %s)", $name, $modelName, $modelName, $name, $valueString);
+        return sprintf("old('%s', isset(\$%s->%s) ? \$%s->%s : %s)", $name, $modelName, $name, $modelName, $name, $valueString);
     }
 
     /**
@@ -238,7 +238,7 @@ class StandardHtml extends HtmlGeneratorBase
             $valueString = starts_with('$', $value) ? sprintf("%s", $value) : sprintf("'%s'", $value);
         }
 
-        return sprintf("in_array(%s, old('%s', isset(\$%s) ? \$%s->%s : []))", $valueString, $name, $modelName, $modelName, $name);
+        return sprintf("in_array(%s, old('%s', isset(\$%s->%s) ? \$%s->%s : []))", $valueString, $name, $modelName, $name, $modelName, $name);
     }
 
     /**
